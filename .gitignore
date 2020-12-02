@@ -1,0 +1,15 @@
+*.sh
+*.dat
+*.txt
+pjobs.cc
+Makefile
+__pycache__/
+./pjobs
+test*.py
+*.rb
+pjobs
+B0*.e*
+B0*.o*
+*.npy
+*.ipynb
+*.png
