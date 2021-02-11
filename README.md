@@ -14,6 +14,9 @@ Download folder `qtensornetwork`.
 # requirements
 Python library [`jax, jaxlib`](https://github.com/google/jax), [`opt_einsum`](https://github.com/dgasmith/opt_einsum) is needed.
 
+# Documents
+Preparing now.
+
 # Example1
 This example classifies binary `mnist dataset`.
 
@@ -29,6 +32,12 @@ from qtensornetwork.gate import *
 from jax.config import config
 config.update("jax_enable_x64", True)
 
+```
+
+First, import library `jax.numpy`, which has the same function as the original `numpy`.
+`QTensorNet` is placed in `qtensornetwork` folder.
+
+```
 import tensorflow as tf
 from tensorflow import keras
 import pandas as pd
@@ -75,16 +84,41 @@ def generate_binary_mnist(f_label, s_label, train_num, test_num, width, height):
     return x_train, y_train, x_test, y_test
 
 
-qnum = 4
-circuit = qtensornetwork.circuit.Circuit(qnum)
-
-xtrain, ytrain, xtest, ytest = generate_binary_mnist(0, 1, 10, 2, 2, 2)
+xtrain, ytrain, xtest, ytest = generate_binary_mnist(0, 1, 100, 20, 8, 8)
 
 qxtrain = qtensornetwork.util.dtoq_miles(xtrain)
 qxtest = qtensornetwork.util.dtoq_miles(xtest)
 
+```
+
+Preparing datasets.  In order to encode classical data
+into quantum state, `xtrain` and `xtest` is converted into
+`qxtrain` and `qxtest` using 
+`qtensornetwork.util.dtoq_miles`. This function converts x to
+(cos pi\*x/2, sin pi\*x/2).
+
+```
+qnum = 64
+circuit = qtensornetwork.circuit.Circuit(qnum)
+
 for i in range(qnum):
     circuit.set_init_state(qtensornetwork.components.State([i], None, train_idx=i))
+
+```
+
+Preparing quantum circuit by `qtensornetwork.circuit.Circuit`.
+
+In order to set the quantum state of datasets,
+method `set_init_state` and object `State` is called.
+`State` has 3 arguments,
+
+* `input_qubits`: list of number. The support of quantum state.
+
+* `tensor`: ndarray. The tensor of quantum state.
+
+* `train_idx`: number. The train index of qxtrain.
+
+```
 
 def complex_gate():
     Rz0 = RZ(0,0)
@@ -98,21 +132,84 @@ def complex_gate():
     return U_gate
 
 cgate = complex_gate()
+
+```
+
+Preparing gate. In `QTensorNet`, gate is implemented
+as object `Gate`. `Gate` has 6 arguments,
+
+* `input_qubits`: list of number. The support of gate.
+
+* `params`: ndarray. The parameters of gate.
+
+* `func`: function. The function from params to unitary tensor.
+
+* `tensor`: ndarray. The unitary tensor of gate.
+
+* `is_updated`: bool. `True` means to update parameters during optimization.
+
+* `train_idx`: list of number. The train index of xtrain. See example 2 below.
+
+In `qtensornetwork.gate`, several
+default gates is prepared. And you can prepare
+any unitary gate using argument `tensor` or
+`func`, `params`.
+
+Function `combine_gates` combines some gates and return
+new gate.
+
+```
 layer = qtensornetwork.ansatz.TTN([i for i in range(qnum)], gate_input_num=2, gate_output_num=1, gate_func=cgate.func, gate_params_num=6)
 circuit.append_layer(layer)
+```
 
+64 qubits quantum circuit cannot be simulated efficiently.
+However, by using Tensor Network structure, the expectation
+value of quantum circuit can be calculated in poly time.
+
+Several ansatz is prepared in `qtensornetwork.ansatz`.
+
+Tree Tensor Network structure `TTN` has 6 arguments,
+
+* `q_support`: list of number. The support of tensor network structure.
+
+* `is_updated`: bool. `True` means to update parameters during optimization.
+
+* `gate_input_num`, `gate_output_num`: number. This decides the shape of each small gates.
+
+* `gate_func`: function. The function of each small gates.
+
+* `gate_params_num`: number. The number of parameters of each small gates.
+
+After preparing TTN-structured layer, it can 
+be appended to the quantum circuit using `circuit.append_layer`.
+
+```
 m_tensor = np.array([[1, 0], [0, 0]])
 measurement1 = qtensornetwork.components.Measurement(None, m_tensor)
 circuit.add_measurement(measurement1)
 
+```
+Add measurement. Object `Measurement` has 2 arguments,
+
+* `input_qubits`: list of number. The support of measurement.`
+
+* `tensor`: ndarray. The tensor of measurement, and it must be
+hermitian.
+
+If you want to use `classify` below, measurement tensor
+must be POVM (in order to satisfy the condition the summation of 
+output equals to 1).
+```
 circuit.show_circuit_structure()
 
 optimizer = qtensornetwork.optimizer.Adam(lr=0.01)
 
-print(ytrain.shape)
-
-circuit.classify(qxtrain, None, ytrain, qxtest, None, ytest, optimizer=optimizer, epoch=100, batch_size=2)
+circuit.classify(qxtrain, None, ytrain, qxtest, None, ytest, optimizer=optimizer, epoch=50, batch_size=20)
 ```
+
+Optimizing procedure. `circuit.classify` for classification and 
+ `circuit.fit` for fitting can be used.
 
 # Example2
 This example classifies binary `iris dataset`.
@@ -120,7 +217,8 @@ This example classifies binary `iris dataset`.
 ```
 import jax.numpy as np
 import numpy as onp
-import qtensornetwork.components as qtc
+from qtensornetwork.circuit import Circuit
+from qtensornetwork.components import Gate, Measurement
 from qtensornetwork.util import data_to_qubits
 from qtensornetwork.gate import *
 from sklearn.datasets import load_iris
@@ -139,26 +237,35 @@ def generate_iris_binary_dataset():
     xtr, ytr, xte, yte = [], [], [], []
 
     for i in range(len(xtrain)):
-        if ytrain[i] != 2:
+        if ytrain[i] == 0:
             xtr.append(xtrain[i])
-            ytr.append(ytrain[i])
+            ytr.append([1, 0])
+        if ytrain[i] == 1:
+            xtr.append(xtrain[i])
+            ytr.append([0, 1])
 
     for i in range(len(xtest)):
-        if ytest[i] != 2:
+        if ytest[i] == 0:
             xte.append(xtest[i])
-            yte.append(ytest[i])
+            yte.append([1, 0])
+        if ytest[i] == 1:
+            xte.append(xtest[i])
+            yte.append([0, 1])
+
     xtrain = np.array(xtr)
     xtest = np.array(xte)
     ytrain = np.array(ytr)
     ytest = np.array(yte)
 
-    qxtrain = data_to_qubits(xtrain, type="Miles")
-    qxtest = data_to_qubits(xtest, type="Miles")
-    return xtrain, qxtrain, ytrain, xtest, qxtest, ytest
+    return xtrain, ytrain, xtest, ytest
 
-xtrain, qxtrain, ytrain, xtest, qxtest, ytest = generate_iris_binary_dataset()
+xtrain, ytrain, xtest, ytest = generate_iris_binary_dataset()
 
-circuit = qtc.Circuit(4)
+circuit = Circuit(4)
+
+RYgate = RY(0,0)
+for q in range(4):
+    circuit.add_gate(Gate([q], params=None, func=RYgate.func, train_idx=[q]))
 
 n = 3
 
@@ -184,12 +291,12 @@ for i in range(n):
     circuit.add_gate(gate)
 
 m = np.array([[1, 0],[0,0]])
-measurement = qtc.Measurement([0], m)
+measurement = Measurement([0], m)
 circuit.add_measurement(measurement)
 
 circuit.show_circuit_structure()
 
-circuit.fit(qxtrain, ytrain, qxtest, ytest, optimizer="adam", epoch=10)
+circuit.classify(None, xtrain, ytrain, None, xtest, ytest, optimizer="adam", epoch=10)
 ```
 
 # Example3
@@ -199,8 +306,9 @@ faster using tensor network.
 ```
 import jax.numpy as np
 import numpy as onp
-import qtensornetwork.components as qtc
-import qtensornetwork.ansatz as qta
+from qtensornetwork.circuit import Circuit
+from qtensornetwork.components import Gate, Measurement
+from qtensornetwork.ansatz import MPS
 from qtensornetwork.util import data_to_qubits
 from qtensornetwork.gate import *
 from sklearn.datasets import load_iris
@@ -219,37 +327,46 @@ def generate_iris_binary_dataset():
     xtr, ytr, xte, yte = [], [], [], []
 
     for i in range(len(xtrain)):
-        if ytrain[i] != 2:
+        if ytrain[i] == 0:
             xtr.append(xtrain[i])
-            ytr.append(ytrain[i])
+            ytr.append([1, 0])
+        if ytrain[i] == 1:
+            xtr.append(xtrain[i])
+            ytr.append([0, 1])
 
     for i in range(len(xtest)):
-        if ytest[i] != 2:
+        if ytest[i] == 0:
             xte.append(xtest[i])
-            yte.append(ytest[i])
+            yte.append([1, 0])
+        if ytest[i] == 1:
+            xte.append(xtest[i])
+            yte.append([0, 1])
+
     xtrain = np.array(xtr)
     xtest = np.array(xte)
     ytrain = np.array(ytr)
     ytest = np.array(yte)
 
-    qxtrain = data_to_qubits(xtrain, type="Miles")
-    qxtest = data_to_qubits(xtest, type="Miles")
-    return xtrain, qxtrain, ytrain, xtest, qxtest, ytest
+    return xtrain, ytrain, xtest, ytest
 
-xtrain, qxtrain, ytrain, xtest, qxtest, ytest = generate_iris_binary_dataset()
+xtrain, ytrain, xtest, ytest = generate_iris_binary_dataset()
 
-circuit = qtc.Circuit(4)
+circuit = Circuit(4)
 
-layer = layer = qta.MPS([i for i in range(4)], gate_input_num=2, gate_output_num=1)
+RYgate = RY(0,0)
+for q in range(4):
+    circuit.add_gate(Gate([q], params=None, func=RYgate.func, train_idx=[q]))
+
+layer = layer = MPS([i for i in range(4)], gate_input_num=2, gate_output_num=1)
 circuit.append_layer(layer)
 
 m = np.array([[1, 0],[0,0]])
-measurement = qtc.Measurement(None, m)
+measurement = Measurement(None, m)
 circuit.add_measurement(measurement)
 
 circuit.show_circuit_structure()
 
-circuit.fit(qxtrain, ytrain, qxtest, ytest, optimizer="adam", epoch=10)
+circuit.classify(None, xtrain, ytrain, None, xtest, ytest, optimizer="adam", epoch=10)
 ```
 
 # Acknowledgements
