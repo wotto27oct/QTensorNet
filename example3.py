@@ -2,6 +2,7 @@ import jax.numpy as np
 import numpy as onp
 from qtensornetwork.circuit import Circuit
 from qtensornetwork.components import Gate, Measurement
+from qtensornetwork.ansatz import MPS
 from qtensornetwork.util import data_to_qubits
 from qtensornetwork.gate import *
 from sklearn.datasets import load_iris
@@ -50,31 +51,11 @@ RYgate = RY(0,0)
 for q in range(4):
     circuit.add_gate(Gate([q], params=None, func=RYgate.func, train_idx=[q]))
 
-n = 3
-
-def circuit1():
-    gates = []
-    gates.append(RX(0,onp.random.randn()))
-    gates.append(RX(1,onp.random.randn()))
-    gates.append(RX(2,onp.random.randn()))
-    gates.append(RX(3,onp.random.randn()))
-    gates.append(RZ(0,onp.random.randn()))
-    gates.append(RZ(1,onp.random.randn()))
-    gates.append(RZ(2,onp.random.randn()))
-    gates.append(RZ(3,onp.random.randn()))
-    gates.append(CNOT([3,2]))
-    gates.append(CNOT([2,1]))
-    gates.append(CNOT([1,0]))
-    gate = combine_gates(gates)
-    return gate
-
-for i in range(n):
-    gate = circuit1()
-    gate.is_updated = True
-    circuit.add_gate(gate)
+layer = layer = MPS([i for i in range(4)], gate_input_num=2, gate_output_num=1)
+circuit.append_layer(layer)
 
 m = np.array([[1, 0],[0,0]])
-measurement = Measurement([0], m)
+measurement = Measurement(None, m)
 circuit.add_measurement(measurement)
 
 circuit.show_circuit_structure()

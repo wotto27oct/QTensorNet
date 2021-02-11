@@ -96,6 +96,7 @@ class ManSGD:
         while f(ret_func(W, [alpha * d[i] if d[i] is not None else None for i in range(len(W))])) > fw + self.tau*alpha*dD:
             alpha *= self.rho
             if alpha < 1e-15:
+                print("er")
                 break
         W = ret_func(W, [alpha * d[i] if d[i] is not None else None for i in range(len(W))])
         for i in range(len(params)):
@@ -105,7 +106,7 @@ class ManSGD:
         
 
 class Adam:
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999):
+    def __init__(self, lr=0.01, beta1=0.9, beta2=0.999):
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2
@@ -153,7 +154,7 @@ class Adam:
         params[index] -= lr_t * self.m[index] / (np.sqrt(self.v[index]) + 1e-7)
 
 class Adam_NGD:
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999):
+    def __init__(self, lr=0.01, beta1=0.9, beta2=0.999):
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2
@@ -181,7 +182,7 @@ class Adam_NGD:
                 params[i] -= lr_t * self.m[i] / (self.v[i] + 1e-7)
 
 class RAdam:
-    def __init__(self, lr=0.001, beta1=0.9, beta2=0.999):
+    def __init__(self, lr=0.01, beta1=0.9, beta2=0.999):
         self.lr = lr
         self.beta1 = beta1
         self.beta2 = beta2
